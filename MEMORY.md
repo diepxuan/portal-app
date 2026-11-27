@@ -9,6 +9,7 @@ Cập nhật lần cuối: khởi tạo repo + bộ tài liệu.
 
 ## 0. Quy tắc cố định
 
+- **Luôn tiếng Việt.** Chat, báo cáo, commit message, mô tả PR, tài liệu, comment code, text trong app — không cần Sếp nhắc lại. Chi tiết: `AGENTS.md` §0.1.
 - **App không chứa nghiệp vụ.** Mọi tên bảng/SP/field/label lấy từ Portal (`/data/portal/`). Xem `docs/PORTAL-REFERENCE.md`.
 - **Không tự tạo API.** Endpoint là việc của repo Portal; app chỉ gọi.
 - **Dùng `npx expo install`**, không `npm install` cho package mới.

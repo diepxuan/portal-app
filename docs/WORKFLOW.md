@@ -50,6 +50,7 @@ Quy tắc:
 - Gọi API → `src/api/` (khi có client)
 - Màu/cỡ chữ → `src/tokens/`, không hardcode
 - Tiếng Việt cho mọi text hiển thị
+- Comment trong code, tên biến mô tả nghiệp vụ: tiếng Việt (xem `AGENTS.md` §0.1)
 
 ## 5. Bước 6 — Verify (không được bỏ)
 

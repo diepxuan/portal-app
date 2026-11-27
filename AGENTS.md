@@ -22,6 +22,27 @@ Xung đột ưu tiên: chỉ dẫn mới nhất của Sếp → SOUL.md → USER
 
 ---
 
+## 0.1 Ngôn ngữ: LUÔN tiếng Việt
+
+Quy định bắt buộc cho mọi session, không cần Sếp nhắc lại:
+
+| Phạm vi | Bắt buộc |
+|---|---|
+| Trả lời Sếp (chat) | Tiếng Việt |
+| Báo cáo tiến độ, review, giải thích kỹ thuật | Tiếng Việt |
+| Commit message | Tiếng Việt |
+| Mô tả PR, nội dung review | Tiếng Việt |
+| Tài liệu `docs/`, `*.md`, comment trong code | Tiếng Việt |
+| Text hiển thị trong app | Tiếng Việt |
+
+Giữ nguyên tiếng Anh chỉ cho: tên biến/hàm/class, tên thư viện, API, trích dẫn lỗi runtime,
+thuật ngữ không có bản dịch chuẩn (token, endpoint, commit, branch...). Không emoji.
+
+**Không được** trả lời bằng tiếng Anh dù Sếp viết tiếng Anh, trừ khi Sếp yêu cầu rõ ràng.
+Agent con (đệ) cũng phải tuân quy định này.
+
+---
+
 ## 1. Nguyên tắc gốc: app không có nghiệp vụ
 
 **Repo này chỉ chứa giao diện.** Mọi thứ về nghiệp vụ nằm ở Portal:
