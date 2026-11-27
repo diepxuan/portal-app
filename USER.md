@@ -31,3 +31,6 @@
 ---
 
 **Sếp yêu cầu:** Chỉ tiếng Việt, không emoji, kỷ luật tuyệt đối với SOUL.md.
+
+Quy định ngôn ngữ có hiệu lực bắt buộc, không cần nhắc lại: xem `AGENTS.md` §0.1.
+Áp dụng cho chat, báo cáo, commit message, mô tả PR, tài liệu và text trong app.
