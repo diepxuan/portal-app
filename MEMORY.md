@@ -28,7 +28,13 @@ Cập nhật lần cuối: khởi tạo repo + bộ tài liệu.
 - Template default đã có sẵn `expo-router` + `react-dom` + `react-native-web` → web chạy ngay, không cần cài thêm.
 - Cấu trúc: `src/app/` (routes), `src/components/`, `src/hooks/`, `src/constants/` (SDK 55+ dùng `src/`).
 - Giữ lịch sử remote `diepxuan/portal-app` (clone → thêm code, không force push).
-- Bộ tài liệu 8 file + `docs/` (ARCHITECTURE, PORTAL-REFERENCE, API-CONTRACT, DESIGN-TOKENS, WORKFLOW).
+- Bộ tài liệu 8 file + `docs/` (ARCHITECTURE, PORTAL-REFERENCE, API-CONTRACT, DESIGN-TOKENS, WORKFLOW, EXPO-OFFICIAL-RULES).
+- Đã xoá code demo của template (explore/tabs/themed-*) và ảnh demo; `src/app/` chỉ còn `_layout.tsx` + `index.tsx` khung.
+- `src/api/`, `src/tokens/`, `src/components/`, `src/constants/`, `src/hooks/` đang có `.gitkeep` — tạo file thật khi làm task.
+- `eslint.config.js` do `npx expo lint` sinh (eslint 9 + eslint-config-expo 58).
+- `app.json` giữ `web.output: "server"` → export web cần `npx expo serve dist`. Nếu sau này host tĩnh (GitHub Pages) phải đổi sang `"single"`.
+- Verify lần đầu: `tsc --noEmit` 0 lỗi, `expo lint` pass, `expo-doctor` 20/20, `expo export --platform web` OK, `expo serve dist` trả HTML 200.
+- Commit đầu: `98ec9c9` (remote `main`).
 
 ---
 
