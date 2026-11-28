@@ -20,6 +20,7 @@ import {
 
 import { fetchMe, login as loginRequest, logout as logoutRequest } from '@/api/auth';
 import { ApiRequestError } from '@/api/client';
+import { setApiContext } from '@/api/context';
 import { deleteItem, getItem, setItem } from '@/api/tokenStorage';
 import type { AuthUser, Company } from '@/api/types';
 
@@ -181,6 +182,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await setItem(YEAR_KEY, String(nextYear));
     setYearState(nextYear);
   }, []);
+
+  /**
+   * Đồng bộ context (công ty + năm) xuống tầng API.
+   *
+   * Mọi request sau đó tự động có header X-Company-Id / X-Year mà không nơi nào
+   * phải nhớ truyền tay. Thiếu bước này thì request âm thầm chạy với '001' của
+   * Portal — sai dữ liệu mà không báo lỗi.
+   */
+  useEffect(() => {
+    if (companyId) {
+      setApiContext({ companyId, year });
+    } else {
+      setApiContext(null);
+    }
+  }, [companyId, year]);
 
   const clearError = useCallback(() => setError(null), []);
 

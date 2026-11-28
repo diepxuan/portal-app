@@ -91,17 +91,39 @@ Authorization: Bearer <token>
 
 ## 3. Context công ty / năm — bắt buộc
 
-Portal hiện lấy context từ **session**:
+### 3.1. Quyết định đã chốt (2026-11-28)
+
+| Hạng mục | Quyết định |
+|---|---|
+| Nơi lưu context | **App lưu local** (secure storage) — không phụ thuộc session |
+| Cách truyền | Gửi kèm **mọi request** qua header `X-Company-Id` + `X-Year` |
+| Web session | **KHÔNG đổi** — Portal web giữ nguyên `session('selected_company')` |
+| Base URL | `…/api/v1` |
+
+Portal hiện lấy context từ session:
 
 ```php
-// diepxuan/laravel-catalog/src/Services/CatalogService.php
-$ma_cty = session('selected_company', '001');   // → luôn rơi về '001' nếu không có session
-$year   = session('year', now()->year);
+// diepxuan/laravel-catalog/src/Services/CatalogService.php:156
+$ma_cty = session('selected_company', '001');
+// :181
+$year = session('year', now()->year);
 ```
 
-App dùng Bearer token **không có session** → mọi SP sẽ chạy với `ma_cty = '001'`, `year = năm hiện tại`.
+App dùng Bearer token không có session. Nếu không có middleware, **mọi request của app
+sẽ chạy với `ma_cty = '001'` và năm hiện tại** — sai dữ liệu kế toán, không báo lỗi.
 
-### Giải pháp: header ngữ cảnh
+### 3.2. Phía app đã làm xong
+
+| Thành phần | File |
+|---|---|
+| Store context cấp module | `src/api/context.ts` |
+| Tự đính header mọi request | `src/api/client.ts` |
+| Đồng bộ context khi user đổi công ty/năm | `src/hooks/useAuth.tsx` |
+
+Đã kiểm chứng bằng test chạy thật: request tự có `X-Company-Id`/`X-Year`, đổi context
+thì header đổi theo, logout thì header biến mất. Không nơi gọi nào phải nhớ truyền tay.
+
+### 3.3. Phía Portal cần làm — CHỈ ĐỌC HEADER, KHÔNG ĐỤNG SESSION
 
 ```http
 GET /api/v1/ardmkh
@@ -110,10 +132,33 @@ X-Company-Id: 001
 X-Year: 2026
 ```
 
-Portal cần middleware đọc 2 header này và set vào `CatalogService` **trước** khi controller chạy.
+**Cách đúng:** tạo một `CatalogContext` object (hoặc bind vào container) đọc từ request
+header, và cho `CatalogService` lấy từ đó **thay vì** `session()`.
 
-Nếu thiếu header:
-- `X-Company-Id` → lấy công ty đầu tiên user được phân quyền
+**Cảnh báo kỹ thuật:** group middleware `api` của Laravel 11 **không có `StartSession`**
+(kiểm chứng tại `Illuminate/Foundation/Configuration/Middleware.php:494`), và Portal
+không bật `statefulApi`. Nên cách cũ "$request->session()->put(...)" **sẽ không chạy**.
+Đừng thêm `StartSession` vào group `api` — điều đó biến API thành stateful, đúng thứ
+contract này muốn tránh, và ảnh hưởng web session mà Sếp yêu cầu giữ nguyên.
+
+Các file đang đọc `session()` (cần refactor nếu muốn API đọc được context):
+
+| File | Dòng | Nội dung |
+|---|---|---|
+| `diepxuan/laravel-catalog/src/Services/CatalogService.php` | 156, 162, 181, 184 | `selected_company`, `year` |
+| `diepxuan/laravel-catalog/src/Services/KhoaSo.php` | 184 | `selected_company` |
+| `diepxuan/laravel-catalog/src/Config/TimerConfig.php` | 56-58 | `timeId`, `timeStart`, `timeEnd` |
+| `diepxuan/laravel-catalog/src/Http/Livewire/Si/Vch/Smks.php` | 149 | `selected_company` |
+
+Gợi ý: `CatalogService` là singleton (`CatalogServiceProvider.php:42`), nên có thể inject
+context qua setter trước khi controller chạy, không cần sửa mọi chỗ gọi `catalog()`.
+
+**Bắt buộc validate:** `X-Company-Id` phải nằm trong danh sách công ty của user. Nếu
+không, user chỉ cần sửa header là đọc được dữ liệu công ty khác — lỗ hổng phân quyền,
+không chỉ là validate dữ liệu.
+
+Quy tắc khi thiếu header:
+- `X-Company-Id` → công ty đầu tiên user được quyền (hoặc `'001'` như hiện tại)
 - `X-Year` → năm hiện tại
 
 ---
