@@ -23,19 +23,84 @@ Chromium headless (màn login hiện đúng, chuyển hướng khi chưa đăng 
 
 ---
 
-## 1. Trạng thái đã kiểm chứng (2026-11-27)
+## 1. Hạ tầng: Cloudflare Access đã Bypass `/api/v1` (2026-11-28)
+
+Sếp đã cấu hình Bypass trên Cloudflare Zero Trust. Kiểm chứng bằng request thật:
+
+| Endpoint | Trước bypass | Sau bypass | Ý nghĩa |
+|---|---|---|---|
+| `/api/v1` | 302 | **404** + JSON Laravel | Đã vào tới app |
+| `/api/v1/SoPh3` | 302 | **401** `Unauthenticated.` | Route thật, Sanctum đang chạy |
+| `/api/v1/auth/login` (POST) | 302 | **404** | Chưa có route |
+| `/api/user` | 302 | **302** | Vẫn bị Access chặn — đúng ý |
+| `/` (web) | 302 | **302** | Web vẫn được bảo vệ — đúng ý |
+
+Response 404 có trace thật từ container Portal (`/var/www/html/vendor/laravel/...`),
+xác nhận request đi qua Cloudflare và vào tới Laravel, không phải Cloudflare trả về.
+
+**Cấu hình đang dùng:** Access application cho `portaldev.diepxuan.io.vn` với Path
+`api/v1`, policy **Bypass**. Web UI vẫn qua Access bình thường.
+
+> **Lưu ý bảo mật cho production:** Bypass chỉ nên áp cho đúng path `api/v1`. Web
+> phải giữ Access. API tự bảo vệ bằng Sanctum + rate limit + HTTPS.
+
+### 1.1. Trạng thái endpoint (kiểm chứng 2026-11-28, sau bypass)
 
 | Endpoint | Trạng thái | Ghi chú |
 |---|---|---|
-| `GET /api/user` | ✅ hoạt động | middleware `auth:sanctum` |
+| `GET /api/user` | ✅ hoạt động (sau Access) | Ngoài prefix `v1`, vẫn bị Access chặn |
+| `GET /api/v1/SoPh3` | ⚠️ 401 | Route tồn tại, cần Bearer token. Logic vẫn hỏng |
 | `/api/v1/products` | ❌ 501 | `CatalogController` trả "not implemented" |
 | `/api/v1/categories` | ❌ 501 | `CategoryController` trả "not implemented" |
-| `/api/v1/SoPh3` | 💥 hỏng | thiếu `use SoPh3`; property `$pMa_CT` không tồn tại |
-| `POST /api/v1/auth/login` | ❌ chưa có | Sanctum có nhưng không có endpoint cấp token |
-| `POST /api/v1/auth/logout` | ❌ chưa có | |
-| `GET /api/v1/auth/me` | ❌ chưa có | |
+| `POST /api/v1/auth/login` | ❌ 404 | **Chưa có route** — blocker chính |
+| `POST /api/v1/auth/logout` | ❌ 404 | Chưa có |
+| `GET /api/v1/auth/me` | ❌ 404 | Chưa có |
 
-**Kết luận:** app chưa thể lấy token, chưa thể gọi dữ liệu.
+**Kết luận:** đường mạng đã thông. App gọi được tới Portal. Còn thiếu đúng 3 endpoint
+auth để đăng nhập thật được.
+
+## 1.2. Base URL theo môi trường — QUY ĐỊNH BẮT BUỘC
+
+| Môi trường | Domain | Dùng khi |
+|---|---|---|
+| **dev** | `https://portaldev.diepxuan.io.vn/api/v1` | Chạy local, Expo Go, test |
+| **production** | `https://portal.diepxuan.io.vn/api/v1` | Bản phát hành cho người dùng thật |
+
+Cách cấu hình — dùng cơ chế `.env` của Expo SDK 58 (tự chọn file theo chế độ):
+
+| File | Nội dung | Commit? |
+|---|---|---|
+| `.env.development` | URL dev | ✅ có |
+| `.env.production` | URL production | ✅ có |
+| `.env.local` | ghi đè riêng máy | ❌ không (đã gitignore) |
+
+URL API **không phải bí mật** — nó nằm plain-text trong bundle app và ai cũng đọc
+được. Nên commit 2 file trên để EAS Build trên cloud đọc được.
+
+Đã kiểm chứng 2026-11-28:
+
+```
+npx expo start   → env: load .env.development  → bundle chứa portaldev...
+npx expo export  → env: load .env.production   → bundle chứa portal...  (không lẫn dev)
+```
+
+Bổ sung: `eas.json` có trường `environment` cho từng profile, và biến đã được đẩy
+lên EAS Environment nên cloud build cũng đọc được:
+
+| EAS environment | Giá trị `EXPO_PUBLIC_API_BASE_URL` |
+|---|---|
+| `development` | `https://portaldev.diepxuan.io.vn/api/v1` |
+| `preview` | `https://portaldev.diepxuan.io.vn/api/v1` |
+| `production` | `https://portal.diepxuan.io.vn/api/v1` |
+
+Lấy biến về local: `eas env:pull --environment development`
+
+### Cảnh báo: không để domain nội bộ lọt vào bản phát hành
+
+Fallback trong `src/api/client.ts` trỏ **domain production**, KHÔNG trỏ
+`portal.diepxuan.corp` (LAN nội bộ, chỉ máy trong mạng mới vào được). Nếu fallback
+trỏ LAN, bản phát hành trên máy người dùng thật sẽ không kết nối được và lỗi này khó
+phát hiện vì dev vẫn chạy tốt.
 
 ---
 

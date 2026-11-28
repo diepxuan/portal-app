@@ -14,7 +14,18 @@
 import { getApiContext } from './context';
 import type { ApiError } from './types';
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://portal.diepxuan.corp/api/v1';
+/**
+ * Base URL API Portal.
+ *
+ * Giá trị thật nằm ở `.env.development` (domain dev) và `.env.production`
+ * (domain production). Expo tự chọn file theo chế độ chạy — xem
+ * https://docs.expo.dev/guides/environment-variables/
+ *
+ * Fallback dưới đây CHỈ để app không crash khi thiếu biến môi trường. Nó trỏ
+ * domain production, KHÔNG trỏ `portal.diepxuan.corp` (LAN nội bộ) — nếu lọt
+ * vào bản phát hành thì app trên máy người dùng thật sẽ không kết nối được.
+ */
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://portal.diepxuan.io.vn/api/v1';
 
 /** Timeout mặc định cho mỗi request (ms) — tránh treo UI khi mạng chậm. */
 const DEFAULT_TIMEOUT_MS = 20_000;
