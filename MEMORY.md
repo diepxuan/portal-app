@@ -3,7 +3,7 @@
 Memory dài hạn cho Bột trên dự án `portal-app`. Ghi lại quyết định, bài học, trạng thái thật.
 Đọc trước mọi task lớn để không lặp lại lỗi cũ.
 
-Cập nhật lần cuối: khởi tạo repo + bộ tài liệu.
+Cập nhật lần cuối: 2026-11-28 — merge PR #3 (tầng auth), bypass Cloudflare, tách base URL theo môi trường.
 
 ---
 
@@ -39,19 +39,41 @@ Cập nhật lần cuối: khởi tạo repo + bộ tài liệu.
 
 ---
 
-## 2. Trạng thái API Portal (đã kiểm chứng 2026-11-27)
+## 2. Trạng thái API Portal (kiểm chứng 2026-11-28, sau bypass Cloudflare)
+
+### 2.1. Hạ tầng — đã thông
+
+Sếp đã Bypass `/api/v1` trên Cloudflare Access cho **cả hai** domain:
+
+| Domain | Môi trường | `/api/v1` | `/` (web) |
+|---|---|---|---|
+| `portaldev.diepxuan.io.vn` | dev | ✅ 404/401 (vào Laravel) | 🔒 302 Access login |
+| `portal.diepxuan.io.vn` | production | ✅ 404/401 (vào Laravel) | 🔒 302 Access login |
+
+Bằng chứng: `GET /api/v1/SoPh3` → **401** `Unauthenticated.` với `server: cloudflare`
+và `cf-ray` có mặt. Response 404 có trace `/var/www/html/vendor/laravel/...` —
+đường dẫn container Portal thật, không phải Cloudflare trả về.
+
+### 2.2. Endpoint
 
 | Endpoint | Trạng thái |
 |---|---|
-| `GET /api/user` | hoạt động |
-| `/api/v1/products` | 501 not implemented |
-| `/api/v1/categories` | 501 not implemented |
-| `/api/v1/SoPh3` | hỏng (thiếu `use SoPh3`, `$pMa_CT` không tồn tại) |
-| `auth/login`, `auth/logout`, `auth/me` | **chưa có** |
+| `GET /api/user` | ✅ có (ngoài prefix v1, vẫn bị Access chặn) |
+| `GET /api/v1/SoPh3` | ⚠️ 401 — route có, cần token; logic vẫn hỏng |
+| `/api/v1/products`, `/categories` | ❌ 501 chưa implement |
+| **`POST /api/v1/auth/login`** | ❌ **404 — BLOCKER CHÍNH** |
+| **`POST /api/v1/auth/logout`** | ❌ 404 |
+| **`GET /api/v1/auth/me`** | ❌ 404 |
 
-→ **Blocker:** app chưa lấy được token, chưa gọi được dữ liệu thật.
+### 2.3. Đã chốt
 
-Sanctum đã cài (`personal_access_tokens`, `HasApiTokens`) nhưng `expiration = null` (token vĩnh viễn — cần sửa).
+| Quyết định | Nội dung |
+|---|---|
+| Base URL | `.env.development` = dev, `.env.production` = production (commit cả 2) |
+| Fallback code | trỏ **production**, KHÔNG trỏ `portal.diepxuan.corp` (LAN) |
+| Context công ty/năm | app lưu local, gửi header `X-Company-Id` + `X-Year`, web session KHÔNG đổi |
+| EAS env | biến đã set cho development/preview/production |
+| Expo account | `caothu159` (User) — KHÔNG dùng token robot `claw` cho Expo Go |
 
 ---
 
@@ -84,6 +106,53 @@ Sanctum đã cài (`personal_access_tokens`, `HasApiTokens`) nhưng `expiration 
 ---
 
 ## 5. Bài học
+
+### 5.0. Không biến trí nhớ thành validate cứng (2026-11-28)
+
+Ba lần liên tiếp trong một ngày, em tự đặt giả định rồi viết validate theo nó, và cả
+ba lần đều chặn đúng thứ hợp lệ:
+
+| Giả định sai | Sự thật | Nguồn đúng |
+|---|---|---|
+| Token Expo phải bắt đầu bằng `expo-` | base64url 40 ký tự, không prefix | `@expo/cli` không hề validate prefix |
+| `user_type` của tài khoản người là `user` | là `person` | `/v2/auth/userinfo` |
+| `expo whoami` in đúng loại tài khoản | chỉ in tên; robot và người trùng dạng | GraphQL `meActor.__typename` |
+
+**Quy tắc:** khi cần validate, phải kiểm chứng bằng API/source thật trước, không suy
+từ kinh nghiệm. Với danh tính thì kiểm `__typename`/`user_type`, không tin tên hiển thị.
+
+### 5.0b. `.bashrc` vô dụng với shell non-interactive
+
+Môi trường này chạy `bash -c` (`$-` = `hBc`, không có `i`), nên `~/.bashrc` KHÔNG được
+nạp. Ghi `export EXPO_TOKEN=...` vào `.bashrc` không có tác dụng. Đã kiểm chứng thực
+nghiệm: ghi biến vào `.bashrc` rồi gọi shell mới → biến không xuất hiện.
+→ Lưu token vào file (`~/.expo/token`) và đọc bằng `$(cat ...)` mỗi lệnh.
+
+### 5.0c. `expo-secure-store` crash trên web
+
+Web export của package là object rỗng:
+```js
+// node_modules/expo-secure-store/build/ExpoSecureStore.web.js
+export default {};
+```
+Nên `setItemAsync` gọi hàm không tồn tại → crash. Phải rẽ nhánh `Platform.OS === 'web'`
+và dùng `localStorage` (xem `src/api/tokenStorage.ts`).
+
+### 5.0d. Tunnel dùng scheme `exps://`, không phải `exp://`
+
+`MetroBundlerDevServer.js:1012` chọn scheme theo protocol: tunnel là HTTPS nên dùng
+`exps`. Comment trong source: *"Expo Go maps the `exps` scheme to HTTPS, which `exp`
+can't express."* Đưa `exp://` cho user sẽ không kết nối được.
+
+### 5.0e. Expo Go trên iPhone cần cùng account NGƯỜI với CLI
+
+Lỗi thật đã gặp trong log Metro:
+```
+iOS ERROR You're signed in to Expo CLI as "claw (robot)" and to Expo Go as
+          "caothu159" — these accounts need to match to open this project.
+```
+Expo CLI **không cảnh báo** trong terminal; lỗi chỉ hiện trên máy. Token robot qua được
+`expo whoami` nhưng không dùng được cho Expo Go.
 
 ### 5.1 Expo web không tự bật
 
