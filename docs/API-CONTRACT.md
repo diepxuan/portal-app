@@ -4,19 +4,103 @@
 
 ---
 
-## 1. Trạng thái đã kiểm chứng (2026-11-27)
+## 0. Phía app đã sẵn sàng (2026-11-28)
+
+Tầng auth của app đã code xong, chỉ chờ endpoint. Khi Portal dựng API đúng contract
+dưới đây, **không cần sửa code app** — chỉ cần build lại.
+
+| Thành phần | File | Trạng thái |
+|---|---|---|
+| HTTP client (Bearer + X-Company-Id + X-Year) | `src/api/client.ts` | xong |
+| Auth API (login / logout / me) | `src/api/auth.ts` | xong, gọi sẽ 404 |
+| Lưu token (Keychain / Keystore) | `src/api/tokenStorage.ts` | xong |
+| Auth context + khôi phục phiên | `src/hooks/useAuth.tsx` | xong |
+| Màn hình đăng nhập | `src/app/login.tsx` | xong |
+| Design token port từ DESIGN.md | `src/tokens/` | xong |
+
+Đã verify: `tsc --noEmit` 0 lỗi, `expo lint` sạch, export web OK, render thật trên
+Chromium headless (màn login hiện đúng, chuyển hướng khi chưa đăng nhập hoạt động).
+
+---
+
+## 1. Hạ tầng: Cloudflare Access đã Bypass `/api/v1` (2026-11-28)
+
+Sếp đã cấu hình Bypass trên Cloudflare Zero Trust. Kiểm chứng bằng request thật:
+
+| Endpoint | Trước bypass | Sau bypass | Ý nghĩa |
+|---|---|---|---|
+| `/api/v1` | 302 | **404** + JSON Laravel | Đã vào tới app |
+| `/api/v1/SoPh3` | 302 | **401** `Unauthenticated.` | Route thật, Sanctum đang chạy |
+| `/api/v1/auth/login` (POST) | 302 | **404** | Chưa có route |
+| `/api/user` | 302 | **302** | Vẫn bị Access chặn — đúng ý |
+| `/` (web) | 302 | **302** | Web vẫn được bảo vệ — đúng ý |
+
+Response 404 có trace thật từ container Portal (`/var/www/html/vendor/laravel/...`),
+xác nhận request đi qua Cloudflare và vào tới Laravel, không phải Cloudflare trả về.
+
+**Cấu hình đang dùng:** Access application cho `portaldev.diepxuan.io.vn` với Path
+`api/v1`, policy **Bypass**. Web UI vẫn qua Access bình thường.
+
+> **Lưu ý bảo mật cho production:** Bypass chỉ nên áp cho đúng path `api/v1`. Web
+> phải giữ Access. API tự bảo vệ bằng Sanctum + rate limit + HTTPS.
+
+### 1.1. Trạng thái endpoint (kiểm chứng 2026-11-28, sau bypass)
 
 | Endpoint | Trạng thái | Ghi chú |
 |---|---|---|
-| `GET /api/user` | ✅ hoạt động | middleware `auth:sanctum` |
+| `GET /api/user` | ✅ hoạt động (sau Access) | Ngoài prefix `v1`, vẫn bị Access chặn |
+| `GET /api/v1/SoPh3` | ⚠️ 401 | Route tồn tại, cần Bearer token. Logic vẫn hỏng |
 | `/api/v1/products` | ❌ 501 | `CatalogController` trả "not implemented" |
 | `/api/v1/categories` | ❌ 501 | `CategoryController` trả "not implemented" |
-| `/api/v1/SoPh3` | 💥 hỏng | thiếu `use SoPh3`; property `$pMa_CT` không tồn tại |
-| `POST /api/v1/auth/login` | ❌ chưa có | Sanctum có nhưng không có endpoint cấp token |
-| `POST /api/v1/auth/logout` | ❌ chưa có | |
-| `GET /api/v1/auth/me` | ❌ chưa có | |
+| `POST /api/v1/auth/login` | ❌ 404 | **Chưa có route** — blocker chính |
+| `POST /api/v1/auth/logout` | ❌ 404 | Chưa có |
+| `GET /api/v1/auth/me` | ❌ 404 | Chưa có |
 
-**Kết luận:** app chưa thể lấy token, chưa thể gọi dữ liệu.
+**Kết luận:** đường mạng đã thông. App gọi được tới Portal. Còn thiếu đúng 3 endpoint
+auth để đăng nhập thật được.
+
+## 1.2. Base URL theo môi trường — QUY ĐỊNH BẮT BUỘC
+
+| Môi trường | Domain | Dùng khi |
+|---|---|---|
+| **dev** | `https://portaldev.diepxuan.io.vn/api/v1` | Chạy local, Expo Go, test |
+| **production** | `https://portal.diepxuan.io.vn/api/v1` | Bản phát hành cho người dùng thật |
+
+Cách cấu hình — dùng cơ chế `.env` của Expo SDK 58 (tự chọn file theo chế độ):
+
+| File | Nội dung | Commit? |
+|---|---|---|
+| `.env.development` | URL dev | ✅ có |
+| `.env.production` | URL production | ✅ có |
+| `.env.local` | ghi đè riêng máy | ❌ không (đã gitignore) |
+
+URL API **không phải bí mật** — nó nằm plain-text trong bundle app và ai cũng đọc
+được. Nên commit 2 file trên để EAS Build trên cloud đọc được.
+
+Đã kiểm chứng 2026-11-28:
+
+```
+npx expo start   → env: load .env.development  → bundle chứa portaldev...
+npx expo export  → env: load .env.production   → bundle chứa portal...  (không lẫn dev)
+```
+
+Bổ sung: `eas.json` có trường `environment` cho từng profile, và biến đã được đẩy
+lên EAS Environment nên cloud build cũng đọc được:
+
+| EAS environment | Giá trị `EXPO_PUBLIC_API_BASE_URL` |
+|---|---|
+| `development` | `https://portaldev.diepxuan.io.vn/api/v1` |
+| `preview` | `https://portaldev.diepxuan.io.vn/api/v1` |
+| `production` | `https://portal.diepxuan.io.vn/api/v1` |
+
+Lấy biến về local: `eas env:pull --environment development`
+
+### Cảnh báo: không để domain nội bộ lọt vào bản phát hành
+
+Fallback trong `src/api/client.ts` trỏ **domain production**, KHÔNG trỏ
+`portal.diepxuan.corp` (LAN nội bộ, chỉ máy trong mạng mới vào được). Nếu fallback
+trỏ LAN, bản phát hành trên máy người dùng thật sẽ không kết nối được và lỗi này khó
+phát hiện vì dev vẫn chạy tốt.
 
 ---
 
@@ -72,17 +156,39 @@ Authorization: Bearer <token>
 
 ## 3. Context công ty / năm — bắt buộc
 
-Portal hiện lấy context từ **session**:
+### 3.1. Quyết định đã chốt (2026-11-28)
+
+| Hạng mục | Quyết định |
+|---|---|
+| Nơi lưu context | **App lưu local** (secure storage) — không phụ thuộc session |
+| Cách truyền | Gửi kèm **mọi request** qua header `X-Company-Id` + `X-Year` |
+| Web session | **KHÔNG đổi** — Portal web giữ nguyên `session('selected_company')` |
+| Base URL | `…/api/v1` |
+
+Portal hiện lấy context từ session:
 
 ```php
-// diepxuan/laravel-catalog/src/Services/CatalogService.php
-$ma_cty = session('selected_company', '001');   // → luôn rơi về '001' nếu không có session
-$year   = session('year', now()->year);
+// diepxuan/laravel-catalog/src/Services/CatalogService.php:156
+$ma_cty = session('selected_company', '001');
+// :181
+$year = session('year', now()->year);
 ```
 
-App dùng Bearer token **không có session** → mọi SP sẽ chạy với `ma_cty = '001'`, `year = năm hiện tại`.
+App dùng Bearer token không có session. Nếu không có middleware, **mọi request của app
+sẽ chạy với `ma_cty = '001'` và năm hiện tại** — sai dữ liệu kế toán, không báo lỗi.
 
-### Giải pháp: header ngữ cảnh
+### 3.2. Phía app đã làm xong
+
+| Thành phần | File |
+|---|---|
+| Store context cấp module | `src/api/context.ts` |
+| Tự đính header mọi request | `src/api/client.ts` |
+| Đồng bộ context khi user đổi công ty/năm | `src/hooks/useAuth.tsx` |
+
+Đã kiểm chứng bằng test chạy thật: request tự có `X-Company-Id`/`X-Year`, đổi context
+thì header đổi theo, logout thì header biến mất. Không nơi gọi nào phải nhớ truyền tay.
+
+### 3.3. Phía Portal cần làm — CHỈ ĐỌC HEADER, KHÔNG ĐỤNG SESSION
 
 ```http
 GET /api/v1/ardmkh
@@ -91,10 +197,33 @@ X-Company-Id: 001
 X-Year: 2026
 ```
 
-Portal cần middleware đọc 2 header này và set vào `CatalogService` **trước** khi controller chạy.
+**Cách đúng:** tạo một `CatalogContext` object (hoặc bind vào container) đọc từ request
+header, và cho `CatalogService` lấy từ đó **thay vì** `session()`.
 
-Nếu thiếu header:
-- `X-Company-Id` → lấy công ty đầu tiên user được phân quyền
+**Cảnh báo kỹ thuật:** group middleware `api` của Laravel 11 **không có `StartSession`**
+(kiểm chứng tại `Illuminate/Foundation/Configuration/Middleware.php:494`), và Portal
+không bật `statefulApi`. Nên cách cũ "$request->session()->put(...)" **sẽ không chạy**.
+Đừng thêm `StartSession` vào group `api` — điều đó biến API thành stateful, đúng thứ
+contract này muốn tránh, và ảnh hưởng web session mà Sếp yêu cầu giữ nguyên.
+
+Các file đang đọc `session()` (cần refactor nếu muốn API đọc được context):
+
+| File | Dòng | Nội dung |
+|---|---|---|
+| `diepxuan/laravel-catalog/src/Services/CatalogService.php` | 156, 162, 181, 184 | `selected_company`, `year` |
+| `diepxuan/laravel-catalog/src/Services/KhoaSo.php` | 184 | `selected_company` |
+| `diepxuan/laravel-catalog/src/Config/TimerConfig.php` | 56-58 | `timeId`, `timeStart`, `timeEnd` |
+| `diepxuan/laravel-catalog/src/Http/Livewire/Si/Vch/Smks.php` | 149 | `selected_company` |
+
+Gợi ý: `CatalogService` là singleton (`CatalogServiceProvider.php:42`), nên có thể inject
+context qua setter trước khi controller chạy, không cần sửa mọi chỗ gọi `catalog()`.
+
+**Bắt buộc validate:** `X-Company-Id` phải nằm trong danh sách công ty của user. Nếu
+không, user chỉ cần sửa header là đọc được dữ liệu công ty khác — lỗ hổng phân quyền,
+không chỉ là validate dữ liệu.
+
+Quy tắc khi thiếu header:
+- `X-Company-Id` → công ty đầu tiên user được quyền (hoặc `'001'` như hiện tại)
 - `X-Year` → năm hiện tại
 
 ---

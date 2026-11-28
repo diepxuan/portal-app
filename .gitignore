@@ -33,6 +33,9 @@ yarn-error.log*
 # env
 .env
 .env.*
+# URL API production KHONG phai bi mat (nam trong bundle app) -> commit de EAS Build doc duoc
+!.env.development
+!.env.production
 !.env.example
 .env*.local
 
