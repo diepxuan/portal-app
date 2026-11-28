@@ -4,6 +4,25 @@
 
 ---
 
+## 0. Phía app đã sẵn sàng (2026-11-28)
+
+Tầng auth của app đã code xong, chỉ chờ endpoint. Khi Portal dựng API đúng contract
+dưới đây, **không cần sửa code app** — chỉ cần build lại.
+
+| Thành phần | File | Trạng thái |
+|---|---|---|
+| HTTP client (Bearer + X-Company-Id + X-Year) | `src/api/client.ts` | xong |
+| Auth API (login / logout / me) | `src/api/auth.ts` | xong, gọi sẽ 404 |
+| Lưu token (Keychain / Keystore) | `src/api/tokenStorage.ts` | xong |
+| Auth context + khôi phục phiên | `src/hooks/useAuth.tsx` | xong |
+| Màn hình đăng nhập | `src/app/login.tsx` | xong |
+| Design token port từ DESIGN.md | `src/tokens/` | xong |
+
+Đã verify: `tsc --noEmit` 0 lỗi, `expo lint` sạch, export web OK, render thật trên
+Chromium headless (màn login hiện đúng, chuyển hướng khi chưa đăng nhập hoạt động).
+
+---
+
 ## 1. Trạng thái đã kiểm chứng (2026-11-27)
 
 | Endpoint | Trạng thái | Ghi chú |
